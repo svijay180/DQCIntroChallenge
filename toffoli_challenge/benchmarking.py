@@ -53,23 +53,47 @@ def expected_output_bitstring(input_bits: str) -> str:
     return f"{c1}{c2}{target ^ (c1 & c2)}"
 
 
+def _outcome_to_bits(value) -> str | None:
+    """One lab outcome as ``q[2]q[1]q[0]``: a bitstring such as ``'110'``, or the
+    lab's integer form 0-7 of the same bits (``6`` means ``'110'``)."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return format(value, "03b") if 0 <= value <= 7 else None
+    if isinstance(value, str):
+        value = value.strip()
+        if _BITSTRING_RE.fullmatch(value):
+            return value
+        if len(value) == 1 and value in "01234567":
+            return format(int(value), "03b")
+    return None
+
+
 def normalize_bitstring_list(raw_bitstrings: str | Iterable[str]) -> list[str]:
-    """Parse and validate a bare lab result list; never use ``eval`` on results."""
+    """Parse and validate a bare lab result list; never use ``eval`` on results.
+
+    Accepts a Python-style list or one outcome per line (or whitespace-separated),
+    each either a three-bit string ``'110'`` or the lab's integer ``6`` for it.
+    Always returns three-bit strings in ``q[2]q[1]q[0]`` order.
+    """
     if isinstance(raw_bitstrings, str):
         text = raw_bitstrings.strip()
         try:
             raw_bitstrings = ast.literal_eval(text)
         except (SyntaxError, ValueError):
-            raw_bitstrings = [line.strip() for line in text.splitlines() if line.strip()]
+            raw_bitstrings = text.split()
+        if isinstance(raw_bitstrings, (int, str)):
+            raw_bitstrings = [raw_bitstrings]
     try:
         values = list(raw_bitstrings)
     except TypeError as error:
         raise ValueError("Expected a bitstring list or text containing one.") from error
     if not values:
         raise ValueError("The hardware result list is empty.")
-    if any(not isinstance(value, str) or not _BITSTRING_RE.fullmatch(value) for value in values):
-        raise ValueError("Every hardware outcome must be a three-bit string, such as '111'.")
-    return values
+    converted = [_outcome_to_bits(value) for value in values]
+    if any(bits is None for bits in converted):
+        raise ValueError("Every hardware outcome must be a three-bit string such as '111' or an integer 0-7.")
+    return converted
 
 
 def load_bitstring_list(path: str | Path) -> list[str]:

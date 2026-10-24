@@ -187,3 +187,18 @@ def test_ionq_helpers_offline(tmp_path):
     record_job(FakeJob(), "ionq_simulator", "truth table", 64, path=log, noise_model="forte-1")
     assert load_job_log(log)[0]["job_id"] == "abc-123"
     assert load_job_log(tmp_path / "missing.json") == []
+
+
+def test_lab_integer_result_format():
+    from toffoli_challenge import normalize_bitstring_list
+
+    # The lab writes one integer 0-7 per line: the bits q[2]q[1]q[0] as a number.
+    assert normalize_bitstring_list("6\n7\n1\n0\n") == ["110", "111", "001", "000"]
+    assert normalize_bitstring_list("6") == ["110"]
+    assert normalize_bitstring_list("['111', '110']") == ["111", "110"]
+    assert normalize_bitstring_list("[6, 7]") == ["110", "111"]
+    files = {"3_64_team_alpha.txt": "\n".join(["7"] * 64)}
+    assert results_by_queue_id(files) == {3: ["111"] * 64}
+    for bad in ("8", "11", "-1", "[True]"):
+        with pytest.raises(ValueError):
+            normalize_bitstring_list(bad)
